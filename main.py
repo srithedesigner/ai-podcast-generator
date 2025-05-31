@@ -1,6 +1,6 @@
 import base64
 import os
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, File, UploadFile, Form
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -51,17 +51,16 @@ async def generate_character(payload = Body(...)):
 
 
 
-
 @app.post("/generate-script/")
 async def generate_script(payload = Body(...)):
-    if True:
-        
+    try:
         print(payload, "payload")
 
-        charecters = payload.get("characters", "[]")
+        # Fix the typo in variable name and match frontend keys
+        characters = payload.get("characters", [])
         podcast_description = payload.get("podcast_description", "")
         
-        if not podcast_description or len(charecters) != 2:
+        if not podcast_description or len(characters) != 2:
             raise HTTPException(status_code=400, detail="Please provide exactly 2 characters and a podcast description.")
         
         # Create detailed prompt
@@ -83,12 +82,12 @@ Your job is to write a humorous, snappy, back-and-forth dialogue between the two
 - Dialogue must feel natural, quick-paced, and character-driven.
 
 ## Character Profiles:
-Character 1: {charecters[0]["name"]}
-Character 2: {charecters[1]["name"]}
+Character 1: {characters[0]["name"]}
+Character 2: {characters[1]["name"]}
 
 ## Character Descriptions:
-Character 1: {charecters[0]["description"]}
-Character 2: {charecters[1]["description"]}
+Character 1: {characters[0]["description"]}
+Character 2: {characters[1]["description"]}
 
 ## Podcast Context:
 {podcast_description}
@@ -120,16 +119,19 @@ Return only a JSON object with this structure:
         try:
             script_data = json.loads(result)
             print(script_data, "script_data")
-            return script_data
+            
+            # Add a "script" key to match what frontend expects
+            return {
+                "script": json.dumps(script_data, indent=2)
+            }
         except json.JSONDecodeError:
             return {
-                "error": "Failed to parse response from LLM as JSON",
-                "response": result
+                "script": "Failed to parse response from LLM as JSON. Raw response: " + result
             }
 
-    # except Exception as e:
-    #     raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
-
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Character Generator API"}
@@ -182,21 +184,32 @@ aspect_ratio = "9:16"
 # Hardcoded studio image URL
 studio_image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/studio.jpg.png"
 
-@app.post("/generate_uploaded_character")
-async def generate_uploaded_character(image_base64: str):
-    # Convert base64 image to blob and save as jpg
-    image_data = base64.b64decode(image_base64)
-    with open("temp_image.jpg", "wb") as f:
-        f.write(image_data)
+@app.post("/generate_uploaded_character/")
+async def generate_uploaded_character(image: UploadFile = File(...)):
+    try:
+        # Read image data
+        image_data = await image.read()
+        
+        # Save temporarily
+        with open("temp_image.jpg", "wb") as f:
+            f.write(image_data)
 
-    # Upload to S3 and get URL
-    image_url = upload_file_to_s3("temp_image.jpg", "temp_image.jpg")
+        # Upload to S3 and get URL
+        image_url = upload_file_to_s3("temp_image.jpg", "temp_image.jpg")
 
-
-    # Call the modular API function
-    final_image_url =  call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
-    print(final_image_url, "final_image_url")
-    return final_image_url
+        # Call the modular API function
+        result = call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
+        print(result, "final_image_url")
+        
+        # Extract the first image URL from the result
+        if result and "images" in result and len(result["images"]) > 0:
+            final_image_url = result["images"][0].get("url", "")
+            return {"final_image_url": final_image_url}
+        else:
+            return {"error": "Failed to generate image"}
+    except Exception as e:
+        print(f"Error processing uploaded image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
 
 @app.post("/dia_to_wav")
