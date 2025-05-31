@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import uvicorn
+from eleven_labs import elevenlabs_text_to_speech
+from models import ElevenLabsVoiceIdentifier
 from services import generate_image_from_prompt, llm_service
 import json
 import fal_client
@@ -195,6 +197,31 @@ async def generate_uploaded_character(image_base64: str):
     final_image_url =  call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
     print(final_image_url, "final_image_url")
     return final_image_url
+
+
+@app.post("/dia_to_wav")
+async def dia_to_wav(payload = Body(...)):
+    try:
+        script = payload.get("dialgue", "")
+        if not script:
+            raise HTTPException(status_code=400, detail="Please provide a script for text-to-speech conversion.")
+
+        # Use the ElevenLabsVoiceIdentifier.WILL for the voice
+        voice = ElevenLabsVoiceIdentifier.WILL
+
+        # Define the output file path
+        output_file_path = "output_audio.wav"
+
+        # Call the Eleven Labs text-to-speech function
+        audio_file_path = await elevenlabs_text_to_speech(script, voice, output_file_path=output_file_path)
+
+        # Upload the audio file to S3 and get the URL
+        audio_url = upload_file_to_s3(audio_file_path, "output_audio.wav")
+
+        return {"audio_url": audio_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
+
 
 if __name__ == "__main__":
     image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/ayush_thumbnail_blue_white.webp"
