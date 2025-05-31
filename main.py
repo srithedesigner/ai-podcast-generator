@@ -221,6 +221,7 @@ async def dia_to_wav(payload = Body(...)):
         return {"audio_url": audio_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
+    
 @app.post("/generate_video")
 async def generate_video(payload = Body(...)):
     try:
@@ -253,11 +254,11 @@ async def call_modular_video_function(image_url: str, audio_url: str) -> str:
     return result["output_url"]
 
 
-if __name__ == "__main__":
-    image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/ayush_thumbnail_blue_white.webp"
-    # Call the fal API function
-    final_image_url = call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
-    print(final_image_url, "final_image_url")
+# if __name__ == "__main__":
+#     image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/ayush_thumbnail_blue_white.webp"
+#     # Call the fal API function
+#     final_image_url = call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
+#     print(final_image_url, "final_image_url")
 
 
 
