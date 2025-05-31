@@ -14,7 +14,7 @@ ELVEN_FLASH_V2_5 = "eleven_flash_v2_5"
 
 load_dotenv()
 
-async def elevenlabs_text_to_speech(script: str, voice: ElevenLabsVoiceIdentifier, is_custom: bool, output_file_path: str):
+async def elevenlabs_text_to_speech(script: str, voice: ElevenLabsVoiceIdentifier, output_file_path: str):
     logger.info("Starting Eleven Labs text-to-speech conversion.")
 
     api_key = os.getenv("ELEVEN_LABS_API_KEY")
@@ -69,8 +69,7 @@ async def elevenlabs_text_to_speech(script: str, voice: ElevenLabsVoiceIdentifie
                                 "error": "service_unavailable",
                                 "message": "Service temporarily unavailable",
                                 "retry_after": "3600",
-                                "voice_id": voice.value,
-                                "is_custom": is_custom
+                                "voice_id": voice.value
                             }
                         )
                     logger.error(f"Failed to generate text-to-speech audio: {error_message}")
@@ -79,8 +78,7 @@ async def elevenlabs_text_to_speech(script: str, voice: ElevenLabsVoiceIdentifie
                         detail={
                             "error": "failed_to_generate_audio",
                             "message": f"Failed to generate text-to-speech audio: {error_message}",
-                            "voice_id": voice.value,
-                            "is_custom": is_custom
+                            "voice_id": voice.value
                         }
                     )
     except Exception as e:
@@ -90,8 +88,7 @@ async def elevenlabs_text_to_speech(script: str, voice: ElevenLabsVoiceIdentifie
             detail={
                 "error": "internal_server_error",
                 "message": f"Failed to generate text-to-speech audio: {str(e)}",
-                "voice_id": voice.value,
-                "is_custom": is_custom
+                "voice_id": voice.value
             }
         )
 
@@ -103,11 +100,10 @@ if __name__ == "__main__":
     async def main():
         script = "Hello, this is a test script for text-to-speech conversion."
         voice = ElevenLabsVoiceIdentifier("gtVylSAXuNzydSb0uL4b")
-        is_custom = True
         output_file_path = "audio.mp3"
         
         try:
-            result = await elevenlabs_text_to_speech(script, voice, is_custom, output_file_path)
+            result = await elevenlabs_text_to_speech(script, voice, output_file_path)
             print(f"Audio file generated at: {result}")
         except HTTPException as e:
             print(f"An error occurred: {e.detail}")

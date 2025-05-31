@@ -1,5 +1,8 @@
 
 # Voice
+from enum import Enum
+
+
 class TTSProvider(str, Enum):
     OPENAI = "openai"
     ELEVEN_LABS = "eleven_labs"
