@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, ChangeEvent } from "react"
 import { Upload, Wand2, Play, FileText, Mic, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,6 +15,7 @@ type Character = {
   description?: string
   isGenerating?: boolean
   generated?: boolean
+  file?: File  // Add file property to store the selected file
 }
 
 type ScriptState = {
@@ -70,15 +71,20 @@ export default function PoseCast() {
     }
     }
 
-    const generateScript = async () => {
-    setScript((prev) => ({ ...prev, isGenerating: true }));
-    try {
-      const characterData = characters.map(char => ({
+const generateScript = async () => {
+  setScript((prev) => ({ ...prev, isGenerating: true }));
+  try {
+    const characterData = characters.map(char => ({
       name: `Character ${char.id}`,
       description: char.description || `Character ${char.id}`
-      }));
+    }));
 
-      const response = await fetch('http://127.0.0.1:8000/generate-script/', {
+    console.log("Sending data:", {
+      characters: characterData,
+      podcast_description: script.context || 'A podcast conversation',
+    });
+
+    const response = await fetch('http://127.0.0.1:8000/generate-script/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -87,32 +93,33 @@ export default function PoseCast() {
         characters: characterData,
         podcast_description: script.context || 'A podcast conversation',
       }),
-      });
-
-      console.log(response);
-      
-      if (!response.ok) {
-        console.log('Failed to generate script');
-      }
-      
-      const data = await response.json();
-      setScript((prev) => ({
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to generate script:', errorText);
+      throw new Error(`Server responded with ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log("Received data:", data);
+    
+    setScript((prev) => ({
       ...prev,
       isGenerating: false,
       generated: true,
       content: data.script || 'Failed to generate script content.',
-      }));
-    } catch (error) {
-      console.error('Error generating script:', error);
-      setScript((prev) => ({
+    }));
+  } catch (error) {
+    console.error('Error generating script:', error);
+    setScript((prev) => ({
       ...prev,
       isGenerating: false,
       generated: true,
       content: `HOST 1: Welcome to today's episode! I'm excited to discuss this fascinating topic.\n\nHOST 2: This is going to be an incredible conversation. Let me start by sharing some insights...`,
-      }));
-    }
-    }
-
+    }));
+  }
+}
     const generateVideo = async () => {
     setIsGeneratingVideo(true);
     try {
@@ -155,6 +162,54 @@ export default function PoseCast() {
     })
   }
 
+  // Add a file input handler
+  const handleFileChange = (id: 1 | 2, e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      updateCharacter(id, { file });
+    }
+  };
+
+  // Add function to handle file upload to API
+  const uploadCharacterImage = async (id: 1 | 2) => {
+    const character = characters.find(char => char.id === id);
+    if (!character?.file) return;
+
+    updateCharacter(id, { isGenerating: true });
+    
+    try {
+      // Create form data to send the file
+      const formData = new FormData();
+      formData.append('image', character.file);
+      
+      const response = await fetch('http://127.0.0.1:8000/generate_uploaded_charecter/', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        console.log('Failed to process uploaded character');
+      }
+
+      
+      const data = await response.json();
+      console.log('Upload response:', data);
+      
+      updateCharacter(id, {
+        isGenerating: false,
+        generated: true,
+        image: data.image_url || `/placeholder.svg?height=300&width=240&text=Character+${id}`,
+      });
+    } catch (error) {
+      console.error('Error uploading character image:', error);
+      updateCharacter(id, { 
+        isGenerating: false,
+        generated: true,
+        image: `/placeholder.svg?height=300&width=240&text=Character+${id}`,
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-purple-50">
       <div className="px-6 py-12 w-full">
@@ -162,8 +217,8 @@ export default function PoseCast() {
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold text-gray-900 mb-4 bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
             <span className="relative">
-              <span className="line-through text-gray-400 mr-1">Pod</span>
-              PoseCast
+              <span className="line-through text-gray-900">Pod</span>
+              <span className="text-gray-400">PoseCast</span>
             </span>
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
@@ -231,20 +286,28 @@ export default function PoseCast() {
                     {character.type === "upload" && !character.generated && (
                       <div className="space-y-4">
                         <div className="border-2 border-dashed border-purple-200 rounded-lg p-8 text-center bg-purple-50/50 hover:bg-purple-50 transition-colors">
-                          <Input type="file" accept="image/*" className="mb-3" />
+                          <Input 
+                            type="file" 
+                            accept="image/*" 
+                            className="mb-3" 
+                            onChange={(e) => handleFileChange(character.id, e)}
+                          />
                           <p className="text-sm text-gray-500">Upload character image</p>
                         </div>
                         <div className="flex gap-2">
                           <Button
-                            onClick={() =>
-                              updateCharacter(character.id, {
-                                generated: true,
-                                image: `/placeholder.svg?height=300&width=240&text=Character+${character.id}`,
-                              })
-                            }
+                            onClick={() => uploadCharacterImage(character.id)}
+                            disabled={!character.file || character.isGenerating}
                             className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
                           >
-                            Confirm
+                            {character.isGenerating ? (
+                              <>
+                                <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                Processing...
+                              </>
+                            ) : (
+                              "Upload & Process"
+                            )}
                           </Button>
                           <Button
                             onClick={() => updateCharacter(character.id, { type: null })}
@@ -434,14 +497,66 @@ export default function PoseCast() {
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
-                    <div className="bg-white rounded-lg p-6 max-h-60 overflow-y-auto border border-gray-200 shadow-sm">
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap">{script.content}</pre>
+                    <div className="bg-gradient-to-br from-white to-gray-50 rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                      {(() => {
+                        try {
+                          // Try to parse the script if it's in JSON format
+                          const scriptData = typeof script.content === 'string' && script.content.trim().startsWith('{') 
+                            ? JSON.parse(script.content)
+                            : null;
+                          
+                          if (scriptData && scriptData.dialogues && Array.isArray(scriptData.dialogues)) {
+                            return (
+                              <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                                {scriptData.dialogues.map((dialogue, index) => (
+                                  <div 
+                                    key={index} 
+                                    className={`p-4 ${dialogue.character === 1 ? 'bg-blue-50' : 'bg-purple-50'}`}
+                                  >
+                                    <div className="flex items-start gap-3">
+                                      <div 
+                                        className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${
+                                          dialogue.character === 1 ? 'bg-gradient-to-br from-blue-500 to-cyan-500' : 'bg-gradient-to-br from-purple-500 to-indigo-500'
+                                        }`}
+                                      >
+                                        C{dialogue.character}
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className={`text-sm font-semibold mb-1 ${
+                                          dialogue.character === 1 ? 'text-blue-700' : 'text-purple-700'
+                                        }`}>
+                                          Character {dialogue.character}
+                                        </p>
+                                        <p className="text-gray-700">{dialogue.text}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
+                          
+                          // Fallback to the regular text display
+                          return (
+                            <pre className="text-sm text-gray-700 whitespace-pre-wrap p-6 max-h-96 overflow-y-auto">
+                              {script.content}
+                            </pre>
+                          );
+                        } catch (error) {
+                          // If parsing fails, show as plain text
+                          return (
+                            <pre className="text-sm text-gray-700 whitespace-pre-wrap p-6 max-h-96 overflow-y-auto">
+                              {script.content}
+                            </pre>
+                          );
+                        }
+                      })()}
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </section>
+                              </CardContent>
+                            </Card>
+                          </section>
 
           {/* Generate Video Section */}
           {canGenerateVideo && (

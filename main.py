@@ -51,17 +51,16 @@ async def generate_character(payload = Body(...)):
 
 
 
-
 @app.post("/generate-script/")
 async def generate_script(payload = Body(...)):
-    if True:
-        
+    try:
         print(payload, "payload")
 
-        charecters = payload.get("characters", "[]")
+        # Fix the typo in variable name and match frontend keys
+        characters = payload.get("characters", [])
         podcast_description = payload.get("podcast_description", "")
         
-        if not podcast_description or len(charecters) != 2:
+        if not podcast_description or len(characters) != 2:
             raise HTTPException(status_code=400, detail="Please provide exactly 2 characters and a podcast description.")
         
         # Create detailed prompt
@@ -83,12 +82,12 @@ Your job is to write a humorous, snappy, back-and-forth dialogue between the two
 - Dialogue must feel natural, quick-paced, and character-driven.
 
 ## Character Profiles:
-Character 1: {charecters[0]["name"]}
-Character 2: {charecters[1]["name"]}
+Character 1: {characters[0]["name"]}
+Character 2: {characters[1]["name"]}
 
 ## Character Descriptions:
-Character 1: {charecters[0]["description"]}
-Character 2: {charecters[1]["description"]}
+Character 1: {characters[0]["description"]}
+Character 2: {characters[1]["description"]}
 
 ## Podcast Context:
 {podcast_description}
@@ -120,16 +119,19 @@ Return only a JSON object with this structure:
         try:
             script_data = json.loads(result)
             print(script_data, "script_data")
-            return script_data
+            
+            # Add a "script" key to match what frontend expects
+            return {
+                "script": json.dumps(script_data, indent=2)
+            }
         except json.JSONDecodeError:
             return {
-                "error": "Failed to parse response from LLM as JSON",
-                "response": result
+                "script": "Failed to parse response from LLM as JSON. Raw response: " + result
             }
 
-    # except Exception as e:
-    #     raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
-
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating script: {str(e)}")
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Character Generator API"}
