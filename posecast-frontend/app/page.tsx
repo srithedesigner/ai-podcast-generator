@@ -182,7 +182,7 @@ const generateScript = async () => {
       const formData = new FormData();
       formData.append('image', character.file);
       
-      const response = await fetch('http://127.0.0.1:8000/generate_uploaded_charecter/', {
+      const response = await fetch('http://127.0.0.1:8000/generate_uploaded_character', {
         method: 'POST',
         body: formData,
       });

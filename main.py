@@ -1,6 +1,6 @@
 import base64
 import os
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, File, UploadFile, Form
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -184,21 +184,32 @@ aspect_ratio = "9:16"
 # Hardcoded studio image URL
 studio_image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/studio.jpg.png"
 
-@app.post("/generate_uploaded_character")
-async def generate_uploaded_character(image_base64: str):
-    # Convert base64 image to blob and save as jpg
-    image_data = base64.b64decode(image_base64)
-    with open("temp_image.jpg", "wb") as f:
-        f.write(image_data)
+@app.post("/generate_uploaded_character/")
+async def generate_uploaded_character(image: UploadFile = File(...)):
+    try:
+        # Read image data
+        image_data = await image.read()
+        
+        # Save temporarily
+        with open("temp_image.jpg", "wb") as f:
+            f.write(image_data)
 
-    # Upload to S3 and get URL
-    image_url = upload_file_to_s3("temp_image.jpg", "temp_image.jpg")
+        # Upload to S3 and get URL
+        image_url = upload_file_to_s3("temp_image.jpg", "temp_image.jpg")
 
-
-    # Call the modular API function
-    final_image_url =  call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
-    print(final_image_url, "final_image_url")
-    return final_image_url
+        # Call the modular API function
+        result = call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
+        print(result, "final_image_url")
+        
+        # Extract the first image URL from the result
+        if result and "images" in result and len(result["images"]) > 0:
+            final_image_url = result["images"][0].get("url", "")
+            return {"final_image_url": final_image_url}
+        else:
+            return {"error": "Failed to generate image"}
+    except Exception as e:
+        print(f"Error processing uploaded image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
 
 @app.post("/dia_to_wav")
