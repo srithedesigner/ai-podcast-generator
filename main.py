@@ -221,6 +221,36 @@ async def dia_to_wav(payload = Body(...)):
         return {"audio_url": audio_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating audio: {str(e)}")
+@app.post("/generate_video")
+async def generate_video(payload = Body(...)):
+    try:
+        image_url = payload.get("image_url", "")
+        audio_url = payload.get("audio_url", "")
+        
+        if not image_url or not audio_url:
+            raise HTTPException(status_code=400, detail="Please provide both image and audio URLs.")
+
+        # Call the modular function to generate video
+        video_url = await call_modular_video_function(image_url, audio_url)
+
+        return {"video_url": video_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating video: {str(e)}")
+
+async def call_modular_video_function(image_url: str, audio_url: str) -> str:
+    handler = await fal_client.submit_async(
+        "fal-ai/hunyuan-avatar",
+        arguments={
+            "audio_url": audio_url,
+            "image_url": image_url
+        }
+    )
+
+    async for event in handler.iter_events(with_logs=True):
+        print(event)
+
+    result = await handler.get()
+    return result["output_url"]
 
 
 if __name__ == "__main__":
