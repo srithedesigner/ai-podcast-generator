@@ -8,6 +8,9 @@
 /.next/
 /out/
 
+.venv/
+__pycache__/
+
 # production
 /build
 

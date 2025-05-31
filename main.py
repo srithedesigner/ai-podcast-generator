@@ -1,8 +1,16 @@
+import base64
+import os
 from fastapi import FastAPI, HTTPException, Body
+from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+import requests
 import uvicorn
 from services import generate_image_from_prompt, llm_service
 import json
+import fal_client
+
+load_dotenv()
+from upload_to_s3 import upload_file_to_s3
 
 app = FastAPI(title="Posecast")
 
@@ -123,6 +131,79 @@ Return only a JSON object with this structure:
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Character Generator API"}
+
+fal_api_key = os.getenv("FAL_KEY")
+
+def on_queue_update(update):
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+            print(log["message"])
+
+def call_fal_api(image_url: str, studio_image_url: str, prompt: str, aspect_ratio: str) -> dict:
+    """
+    Calls the external API to generate an image based on the provided parameters.
+
+    Args:
+        image_url: The URL of the uploaded image.
+        studio_image_url: The URL of the hardcoded studio image.
+        prompt: The prompt describing the desired image transformation.
+        aspect_ratio: The desired aspect ratio for the generated image.
+
+    Returns:
+        A dictionary containing the generated images and the prompt used, or an error message.
+    """
+    result = fal_client.subscribe(
+        "fal-ai/flux-pro/kontext/multi",
+        arguments={
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "image_urls": [image_url, studio_image_url]
+        },
+        with_logs=True,
+        on_queue_update=on_queue_update,
+    )
+
+    if result:
+        return {
+            "images": result.get("images", []),
+            "prompt": prompt
+        }
+    else:
+        return {"error": "Failed to generate image"}
+
+
+
+
+# Define the prompt and aspect ratio
+prompt = "Replace the person in the image to seated in the same position at the podcast table. Keep the red chair, wooden desk, folded hands posture, Add black over-ear headphones, and the microphone setup on the left. Replace studio background with beige soundproof panels and a softbox light in the corner. Use the same camera angle and lighting — a waist-up, eye-level shot with a warm, professional podcast vibe."
+aspect_ratio = "9:16"
+# Hardcoded studio image URL
+studio_image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/studio.jpg.png"
+
+@app.post("/generate_uploaded_character")
+async def generate_uploaded_character(image_base64: str):
+    # Convert base64 image to blob and save as jpg
+    image_data = base64.b64decode(image_base64)
+    with open("temp_image.jpg", "wb") as f:
+        f.write(image_data)
+
+    # Upload to S3 and get URL
+    image_url = upload_file_to_s3("temp_image.jpg", "temp_image.jpg")
+
+
+    # Call the modular API function
+    final_image_url =  call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
+    print(final_image_url, "final_image_url")
+    return final_image_url
+
+if __name__ == "__main__":
+    image_url = "https://test-bucket-aws-mine.s3.ap-south-1.amazonaws.com/ayush_thumbnail_blue_white.webp"
+    # Call the fal API function
+    final_image_url = call_fal_api(image_url, studio_image_url, prompt, aspect_ratio)
+    print(final_image_url, "final_image_url")
+
+
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
